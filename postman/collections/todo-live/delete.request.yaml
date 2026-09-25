@@ -1,0 +1,7 @@
+$kind: http-request
+url: localhost:4000/todos/3
+method: DELETE
+body:
+  type: json
+  content: ""
+order: 4446110607488349
