@@ -7,19 +7,27 @@ const logRequest = require("./logger")
 const { validateCreateTodo, validateUpdateTodo } = require("./validator");
 const errorHandler = require("./errorHandler")
 
+const connectDB = require("./database/db.js")
+//const connectDB = require("connectDB")
+const Todo = require("./models/todo.model.js")
+
 app.use(express.json()); // inilizing express.json
+
+connectDB();
 
 app.use(logRequest);
 
-let todos = [{id:1, task:"learn node.js", completed: false},
-    {id:2, task:"Build CRUD API", completed:false},
-    {id:3, task:"Build a car", completed:true}
-];
-
-app.get("/todos", (req, res) =>{
+app.get("/todos", async(req, res) =>{
+    try {
+     const todos = await Todo.find({})
     res.status(200).json(todos)
-}); // send as json
+        
+    } catch (error) {
+        res.status(500).json({message: error.message});
+        
+    }
 
+}); // send as json
 app.get('/todos/active', (req,res) =>{
 const activeTodos = todos.filter((t) => t.completed === false);
 
@@ -27,14 +35,21 @@ res.json(activeTodos);
 
 });
 
-app.get('/todos/:id', (req, res, next) => {
+app.get('/todos/completed', async(req, res, next) => {
   try {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)){
-        throw new Error("Invalid ID");
-        
-    }
-    const todo = todos.find((t) => t.id === id);
+    //const completed = todos.filter((t) => t.completed);
+    
+    const completed = await Todo.find({completed: true})
+    res.json(completed); // Custom Read!
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/todos/:id', async(req, res, next) => {
+  try {
+
+    const todo = await Todo.findById(req.params.id)
 
   if (!todo) {
     return res.status(404).json({ message: 'Todo not found' });
@@ -48,17 +63,18 @@ app.get('/todos/:id', (req, res, next) => {
   }
 });
 
-app.post("/todos", validateCreateTodo, (req, res, next) => {
+app.post("/todos", validateCreateTodo, async(req, res, next) => {
    try {
-     console.log(req.body);
-const task= req.body.task;
-if (!task.trim()) {
-    return res.status(400).json({message: 'task is require'});
-};
-const newTodo= {id: todos.length + 1, ...req.body};
 
-todos.push(newTodo);
-res.status(201).json(newTodo);// sending to the frontend 
+    const {task, completed} = req.body
+    const newTodo = new Todo({
+    task,
+    completed
+});
+await newTodo.save();
+res.status(201).json(newTodo);
+
+
     
    } catch (error) {
     next(error);
@@ -68,12 +84,16 @@ res.status(201).json(newTodo);// sending to the frontend
 });
 
 // PATCH Update – Partial
-app.patch('/todos/:id', validateUpdateTodo, (req, res, next) => {
+app.patch('/todos/:id', validateUpdateTodo, async(req, res, next) => {
   try {
-    const todo = todos.find((t) => t.id === parseInt(req.params.id));
-    if (!todo) return res.status(404).json({ message: 'Not found' });
 
-    Object.assign(todo, req.body); 
+    const todo = await Todo.findByIdAndUpdate(req.params.id, req.body,
+        {new: true})
+
+     if (!todo) {
+    return res.status(404).json({ message: 'Todo not found' });
+  }
+
     res.status(200).json(todo);
     
   } catch (error) {
@@ -82,17 +102,15 @@ app.patch('/todos/:id', validateUpdateTodo, (req, res, next) => {
 });
 
 // DELETE Remove
-app.delete('/todos/:id', (req, res, next) => {
+app.delete('/todos/:id', async(req, res, next) => {
    try {
-     const id = parseInt(req.params.id);
-    const initialLength = todos.length;
 
-    todos = todos.filter((t) => t.id !== id);
+     const todo = await Todo.findByIdAndDelete(req.params.id);
+     if (!todo) {
+    return res.status(404).json({ message: 'Todo not found' });
+  };
 
-    if (todos.length === initialLength)
-        return res.status(404).json({ error: 'Not found' });
-
-    res.status(204).send(); // Silent succe
+    res.status(204).json({message: `Todo ${req.params.id} deleted`}); // Silent succe
     
    } catch (error) {
     next(error);
